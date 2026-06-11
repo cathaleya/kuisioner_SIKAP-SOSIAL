@@ -104,22 +104,6 @@ def local_css():
         border: 2px solid #bbf7d0;
         box-shadow: 0 8px 30px rgba(16, 185, 129, 0.1);
     }
-
-    .selection-card {
-        background: white;
-        padding: 25px;
-        border-radius: 16px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-
-    .selection-card:hover {
-        border-color: #10b981;
-        transform: translateY(-3px);
-        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.1);
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -128,29 +112,31 @@ local_css()
 # ==========================================
 # SESSION STATE INITIALIZATION
 # ==========================================
-if "instrument" not in st.session_state:
-    st.session_state.instrument = None  # "minat" or "sikap" or None
 if "page" not in st.session_state:
-    st.session_state.page = "select_instrument"  # select_instrument, biodata, aspect_idx, summary, finish
+    st.session_state.page = "biodata"  # biodata, minat_aspect_0..3, minat_open, minat_summary, minat_success, sikap_aspect_0..6, sikap_scenario, sikap_reflection, sikap_summary, finish
 if "biodata" not in st.session_state:
     st.session_state.biodata = {}
-if "answers" not in st.session_state:
-    st.session_state.answers = {}
-if "essay_answers" not in st.session_state:
-    st.session_state.essay_answers = {}
+if "minat_answers" not in st.session_state:
+    st.session_state.minat_answers = {}
+if "minat_essays" not in st.session_state:
+    st.session_state.minat_essays = {}
+if "sikap_answers" not in st.session_state:
+    st.session_state.sikap_answers = {}
+if "sikap_essays" not in st.session_state:
+    st.session_state.sikap_essays = {}
 
 # ==========================================
 # HELPER FUNCTIONS
 # ==========================================
 def reset_state():
-    st.session_state.instrument = None
-    st.session_state.page = "select_instrument"
+    st.session_state.page = "biodata"
     st.session_state.biodata = {}
-    st.session_state.answers = {}
-    st.session_state.essay_answers = {}
+    st.session_state.minat_answers = {}
+    st.session_state.minat_essays = {}
+    st.session_state.sikap_answers = {}
+    st.session_state.sikap_essays = {}
 
 def get_apps_script_url():
-    # Attempt to load from Streamlit secrets
     url = None
     if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
         url = st.secrets["connections"]["gsheets"]["spreadsheet"]
@@ -173,10 +159,8 @@ def submit_payload(payload):
                 if res_json.get("result") == "success":
                     return True
                 else:
-                    # Fallback if Apps Script replies with error
                     return res_json.get("status") == "ok" or res_json.get("result") == "ok"
             except Exception:
-                # Fallback if response is successful status but not JSON
                 return True
         else:
             st.error(f"Koneksi gagal (Status {response.status_code}): {response.text}")
@@ -193,9 +177,9 @@ def build_unified_payload(instrument_type, biodata, answers, essay_answers):
     # Biodata
     payload["Nama"] = biodata.get("nama", "")
     payload["Lembaga_PPG"] = biodata.get("lembaga_ppg", "")
-    payload["Program_Studi"] = biodata.get("program_studi", "") if instrument_type == "minat" else "N/A"
+    payload["Program_Studi"] = biodata.get("program_studi", "")
     payload["Semester"] = biodata.get("semester", "")
-    payload["Usia"] = biodata.get("usia", "") if instrument_type == "sikap" else "N/A"
+    payload["Usia"] = biodata.get("usia", "")
     
     total_score = 0
     
@@ -210,7 +194,6 @@ def build_unified_payload(instrument_type, biodata, answers, essay_answers):
             else:
                 payload[f"Q{i}_Skor"] = ""
                 payload[f"Q{i}_Teks"] = ""
-        # 21-28 are blank for Minat Belajar
         for i in range(21, 29):
             payload[f"Q{i}_Skor"] = ""
             payload[f"Q{i}_Teks"] = ""
@@ -229,13 +212,11 @@ def build_unified_payload(instrument_type, biodata, answers, essay_answers):
     
     # Open questions / scenarios (1 to 6)
     if instrument_type == "minat":
-        # Minat has 3 open questions
         for i in range(1, 4):
             payload[f"Respon_Terbuka_{i}"] = essay_answers.get(f"essay_{i}", "")
         for i in range(4, 7):
             payload[f"Respon_Terbuka_{i}"] = "N/A"
     else:
-        # Sikap has 3 scenarios (Open 1-3) and 3 reflections (Open 4-6)
         for i in range(1, 4):
             payload[f"Respon_Terbuka_{i}"] = essay_answers.get(f"scenario_{i}", "")
         for i in range(4, 7):
@@ -244,350 +225,433 @@ def build_unified_payload(instrument_type, biodata, answers, essay_answers):
     return payload
 
 # ==========================================
-# PAGE CONTROLLERS
+# PAGE ROUTER
 # ==========================================
 
-# 1. SELECT INSTRUMENT PAGE
-if st.session_state.page == "select_instrument":
+# Page 1: Biodata
+if st.session_state.page == "biodata":
     st.markdown("""
         <div class="header-section">
-            <h1 style="margin:0; color:white;">🎓 SISTEM ANGKET PENELITIAN</h1>
-            <p style="margin-top:10px; font-size:1.1rem; opacity:0.9;">Silakan pilih instrumen kuisioner di bawah ini untuk memulai pengisian.</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-            <div class="selection-card">
-                <h3 style="margin-top:0; color:#064e3b;">📚 Minat Belajar</h3>
-                <p style="color:#374151; font-size:0.9rem; min-height:60px;">Mengukur perasaan senang, ketertarikan, relevansi, keterlibatan, dan dorongan ekstrinsik mahasiswa selama perkuliahan PPG.</p>
-            </div>
-        """, unsafe_allow_html=True)
-        if st.button("Mulai Angket Minat", key="btn_minat"):
-            st.session_state.instrument = "minat"
-            st.session_state.page = "biodata"
-            st.rerun()
-            
-    with col2:
-        st.markdown("""
-            <div class="selection-card">
-                <h3 style="margin-top:0; color:#064e3b;">🤝 Sikap Sosial</h3>
-                <p style="color:#374151; font-size:0.9rem; min-height:60px;">Mengukur aspek tanggung jawab, empati, kerja sama, keteladanan, komunikasi, dan adaptasi sosial calon guru SD.</p>
-            </div>
-        """, unsafe_allow_html=True)
-        if st.button("Mulai Angket Sikap Sosial", key="btn_sikap"):
-            st.session_state.instrument = "sikap"
-            st.session_state.page = "biodata"
-            st.rerun()
-
-# 2. BIODATA ENTRY PAGE
-elif st.session_state.page == "biodata":
-    inst = MINAT_BELAJAR if st.session_state.instrument == "minat" else SIKAP_SOSIAL
-    
-    st.markdown(f"""
-        <div class="header-section">
-            <h1 style="margin:0; color:white; font-size:1.6rem; font-weight:800;">{inst['title']}</h1>
-            <p style="margin-top:8px; font-size:1rem; opacity:0.95; font-weight:600;">{inst['subtitle']}</p>
+            <h1 style="margin:0; color:white; font-size:1.8rem; font-weight:800;">ANGKET RESPON MAHASISWA PPG</h1>
+            <p style="margin-top:8px; font-size:1.1rem; opacity:0.95; font-weight:600;">PENDIDIKAN PROFESI GURU (PPG)</p>
             <div style="background-color:rgba(255,255,255,0.2); height:1px; margin: 15px 0;"></div>
-            <h3 style="margin:0; color:white; font-size:1.2rem; font-weight:700;">📋 {inst['biodata_title']}</h3>
+            <h3 style="margin:0; color:white; font-size:1.2rem; font-weight:700;">📋 Data Responden</h3>
         </div>
     """, unsafe_allow_html=True)
     
-    st.info("Silakan isi biodata Anda sebelum melanjutkan pengisian angket.")
+    st.info("Silakan lengkapi identitas responden Anda. Biodata ini berlaku untuk kedua instrumen.")
     
-    with st.form("form_biodata"):
-        biodata_entries = {}
-        for field in inst["biodata_fields"]:
-            if field["type"] == "text":
-                biodata_entries[field["id"]] = st.text_input(field["label"])
-            elif field["type"] == "select":
-                biodata_entries[field["id"]] = st.selectbox(field["label"], field["options"])
+    with st.form("form_biodata_combined"):
+        nama = st.text_input("Nama", value=st.session_state.biodata.get("nama", ""))
+        lembaga_ppg = st.text_input("Lembaga PPG", value=st.session_state.biodata.get("lembaga_ppg", ""))
+        program_studi = st.text_input("Program Studi", value=st.session_state.biodata.get("program_studi", ""))
         
+        sem_list = ["1", "2", "3", "4", "5", "6", "7", "8", ">8"]
+        existing_sem = st.session_state.biodata.get("semester", "1")
+        semester = st.selectbox("Semester", sem_list, index=sem_list.index(existing_sem) if existing_sem in sem_list else 0)
+        
+        usia = st.text_input("Usia (Tahun)", value=st.session_state.biodata.get("usia", ""))
+        
+        submit_bio = st.form_submit_button("Mulai Angket ➡️")
+        
+        if submit_bio:
+            if nama.strip() and lembaga_ppg.strip() and program_studi.strip() and usia.strip():
+                st.session_state.biodata = {
+                    "nama": nama,
+                    "lembaga_ppg": lembaga_ppg,
+                    "program_studi": program_studi,
+                    "semester": semester,
+                    "usia": usia
+                }
+                st.session_state.page = "minat_aspect_0"
+                st.rerun()
+            else:
+                st.warning("Mohon lengkapi semua field biodata.")
+
+# Minat Belajar Aspect Pages
+elif st.session_state.page.startswith("minat_aspect_"):
+    aspect_idx = int(st.session_state.page.split("_")[-1])
+    aspects = list(MINAT_BELAJAR["likert_aspects"].keys())
+    aspect_name = aspects[aspect_idx]
+    questions_list = MINAT_BELAJAR["likert_aspects"][aspect_name]
+    
+    # Calculate overall question number offset
+    q_offset = 0
+    for i in range(aspect_idx):
+        q_offset += len(MINAT_BELAJAR["likert_aspects"][aspects[i]])
+        
+    st.markdown(f"""
+        <div style="margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #064e3b;">📚 ANGKET MINAT BELAJAR MAHASISWA</h3>
+            <div style="background-color: #e2e8f0; height: 6px; border-radius: 3px; margin-top: 8px;">
+                <div style="background-color: #10b981; height: 6px; border-radius: 3px; width: {((aspect_idx + 1) / 6) * 100}%;"></div>
+            </div>
+            <p style="font-size:0.85rem; color:#6b7280; text-align:right; margin-top:4px;">Bagian 1: Halaman {aspect_idx + 1} dari 6</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f'<div class="aspect-card">{aspect_name}</div>', unsafe_allow_html=True)
+    
+    with st.form(f"form_minat_aspect_{aspect_idx}"):
+        page_responses = {}
+        for i, q_text in enumerate(questions_list):
+            q_num = q_offset + i + 1
+            q_key = f"q_{q_num}"
+            
+            existing = st.session_state.minat_answers.get(q_key, None)
+            existing_idx = [5, 4, 3, 2, 1].index(existing["score"]) if existing else 0
+            
+            choice = st.radio(
+                f"{q_num}. {q_text}",
+                options=[5, 4, 3, 2, 1],
+                format_func=lambda x: LIKERT_OPTIONS_MINAT[x],
+                index=existing_idx,
+                key=f"ui_minat_{q_key}",
+                horizontal=True
+            )
+            page_responses[q_key] = choice
+            
         col_back, col_next = st.columns(2)
         with col_back:
-            back_clicked = st.form_submit_button("⬅ Kembali Ke Menu")
+            back_clicked = st.form_submit_button("⬅ Kembali")
         with col_next:
             next_clicked = st.form_submit_button("Lanjutkan ➡️")
             
         if back_clicked:
-            reset_state()
+            if aspect_idx == 0:
+                st.session_state.page = "biodata"
+            else:
+                st.session_state.page = f"minat_aspect_{aspect_idx - 1}"
             st.rerun()
             
         if next_clicked:
-            # Validate required inputs
-            missing = False
-            for field in inst["biodata_fields"]:
-                if field["type"] == "text" and not biodata_entries[field["id"]].strip():
-                    missing = True
-                    break
-            
-            if missing:
-                st.warning("Mohon lengkapi seluruh field biodata.")
-            else:
-                st.session_state.biodata = biodata_entries
-                st.session_state.page = 0  # index of first aspect/page of questions
-                st.rerun()
+            for q_key, val in page_responses.items():
+                st.session_state.minat_answers[q_key] = {
+                    "score": val,
+                    "text": LIKERT_OPTIONS_MINAT[val]
+                }
+            st.session_state.page = f"minat_aspect_{aspect_idx + 1}" if aspect_idx < 3 else "minat_open"
+            st.rerun()
 
-# 3. ASPECT QUESTIONNAIRE PAGES (STEPPED)
-elif isinstance(st.session_state.page, int):
-    inst_type = st.session_state.instrument
-    inst = MINAT_BELAJAR if inst_type == "minat" else SIKAP_SOSIAL
-    options_dict = LIKERT_OPTIONS_MINAT if inst_type == "minat" else LIKERT_OPTIONS_SIKAP
-    
-    aspects_keys = list(inst["likert_aspects"].keys())
-    current_aspect_idx = st.session_state.page
-    total_aspects = len(aspects_keys)
-    
-    # Determine what is the next step:
-    # After the last Likert aspect, we go to qualitative questions (Open Questions / Scenarios)
-    # The qualitative section can be page index = total_aspects.
-    
-    # Helper to calculate progress percentage
-    total_steps = total_aspects + (1 if inst_type == "minat" else 2) # Minat has 1 essay page, Sikap has 2 (scenarios + reflections)
-    progress_val = (current_aspect_idx + 1) / total_steps
-    
-    if current_aspect_idx < total_aspects:
-        # Likert Aspect Page
-        aspect_name = aspects_keys[current_aspect_idx]
-        questions_list = inst["likert_aspects"][aspect_name]
-        
-        # Calculate overall question index offset
-        prev_questions_count = 0
-        for i in range(current_aspect_idx):
-            prev_questions_count += len(inst["likert_aspects"][aspects_keys[i]])
-            
-        st.markdown(f"""
-            <div style="margin-bottom: 20px;">
-                <h3 style="margin: 0; color: #064e3b;">{inst['title']}</h3>
-                <div style="background-color: #e2e8f0; height: 6px; border-radius: 3px; margin-top: 8px;">
-                    <div style="background-color: #10b981; height: 6px; border-radius: 3px; width: {progress_val * 100}%;"></div>
-                </div>
-                <p style="font-size:0.85rem; color:#6b7280; text-align:right; margin-top:4px;">Halaman {current_aspect_idx + 1} dari {total_steps}</p>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown(f'<div class="aspect-card">{aspect_name}</div>', unsafe_allow_html=True)
-        
-        with st.form(f"form_aspect_{current_aspect_idx}"):
-            page_responses = {}
-            for i, question_text in enumerate(questions_list):
-                q_num = prev_questions_count + i + 1
-                q_key = f"q_{q_num}"
-                
-                existing_ans = st.session_state.answers.get(q_key, None)
-                existing_idx = None
-                if existing_ans is not None:
-                    existing_idx = [5, 4, 3, 2, 1].index(existing_ans["score"])
-                
-                choice = st.radio(
-                    f"{q_num}. {question_text}",
-                    options=[5, 4, 3, 2, 1],
-                    format_func=lambda x: options_dict[x],
-                    index=existing_idx,
-                    key=f"ui_{q_key}",
-                    horizontal=True
-                )
-                page_responses[q_key] = choice
-                
-            col_back, col_next = st.columns(2)
-            with col_back:
-                back_clicked = st.form_submit_button("⬅ Kembali")
-            with col_next:
-                next_clicked = st.form_submit_button("Lanjutkan ➡️")
-                
-            if back_clicked:
-                if current_aspect_idx == 0:
-                    st.session_state.page = "biodata"
-                else:
-                    st.session_state.page = current_aspect_idx - 1
-                st.rerun()
-                
-            if next_clicked:
-                # Save page responses to state
-                for q_key, score in page_responses.items():
-                    st.session_state.answers[q_key] = {
-                        "score": score,
-                        "text": options_dict[score]
-                    }
-                st.session_state.page = current_aspect_idx + 1
-                st.rerun()
-
-    else:
-        # QUALITATIVE QUESTIONS PAGES (index >= total_aspects)
-        # Minat has 1 page of open questions
-        # Sikap has Scenario page (index = total_aspects) and Reflection page (index = total_aspects + 1)
-        
-        st.markdown(f"""
-            <div style="margin-bottom: 20px;">
-                <h3 style="margin: 0; color: #064e3b;">{inst['title']}</h3>
-                <div style="background-color: #e2e8f0; height: 6px; border-radius: 3px; margin-top: 8px;">
-                    <div style="background-color: #10b981; height: 6px; border-radius: 3px; width: {progress_val * 100}%;"></div>
-                </div>
-                <p style="font-size:0.85rem; color:#6b7280; text-align:right; margin-top:4px;">Halaman {current_aspect_idx + 1} dari {total_steps}</p>
-            </div>
-        """, unsafe_allow_html=True)
-
-        if inst_type == "minat":
-            # Minat Belajar Open Questions Page
-            st.markdown('<div class="aspect-card">D. Pertanyaan Terbuka</div>', unsafe_allow_html=True)
-            
-            with st.form("form_open_questions"):
-                responses = {}
-                for i, q_text in enumerate(inst["open_questions"]):
-                    essay_key = f"essay_{i+1}"
-                    existing_text = st.session_state.essay_answers.get(essay_key, "")
-                    responses[essay_key] = st.text_area(q_text, value=existing_text, height=120)
-                
-                col_back, col_next = st.columns(2)
-                with col_back:
-                    back_clicked = st.form_submit_button("⬅ Kembali")
-                with col_next:
-                    next_clicked = st.form_submit_button("Lanjutkan ke Ringkasan 🏁")
-                    
-                if back_clicked:
-                    st.session_state.page = total_aspects - 1
-                    st.rerun()
-                    
-                if next_clicked:
-                    st.session_state.essay_answers.update(responses)
-                    st.session_state.page = "summary"
-                    st.rerun()
-                    
-        else:
-            # Sikap Sosial qualitative pages
-            # If current index == total_aspects, show Scenarios
-            # If current index == total_aspects + 1, show Reflections
-            if current_aspect_idx == total_aspects:
-                st.markdown('<div class="aspect-card">H. Skenario Situasional</div>', unsafe_allow_html=True)
-                
-                with st.form("form_scenarios"):
-                    responses = {}
-                    for i, q_text in enumerate(inst["scenarios"]):
-                        essay_key = f"scenario_{i+1}"
-                        existing_text = st.session_state.essay_answers.get(essay_key, "")
-                        responses[essay_key] = st.text_area(q_text, value=existing_text, height=120)
-                    
-                    col_back, col_next = st.columns(2)
-                    with col_back:
-                        back_clicked = st.form_submit_button("⬅ Kembali")
-                    with col_next:
-                        next_clicked = st.form_submit_button("Lanjutkan ➡️")
-                        
-                    if back_clicked:
-                        st.session_state.page = total_aspects - 1
-                        st.rerun()
-                        
-                    if next_clicked:
-                        st.session_state.essay_answers.update(responses)
-                        st.session_state.page = total_aspects + 1
-                        st.rerun()
-            else:
-                # Reflections
-                st.markdown('<div class="aspect-card">I. Refleksi Diri</div>', unsafe_allow_html=True)
-                
-                with st.form("form_reflections"):
-                    responses = {}
-                    for i, q_text in enumerate(inst["reflections"]):
-                        essay_key = f"reflection_{i+1}"
-                        existing_text = st.session_state.essay_answers.get(essay_key, "")
-                        responses[essay_key] = st.text_area(q_text, value=existing_text, height=120)
-                    
-                    col_back, col_next = st.columns(2)
-                    with col_back:
-                        back_clicked = st.form_submit_button("⬅ Kembali")
-                    with col_next:
-                        next_clicked = st.form_submit_button("Lanjutkan ke Ringkasan 🏁")
-                        
-                    if back_clicked:
-                        st.session_state.page = total_aspects
-                        st.rerun()
-                        
-                    if next_clicked:
-                        st.session_state.essay_answers.update(responses)
-                        st.session_state.page = "summary"
-                        st.rerun()
-
-# 4. SUMMARY PAGE
-elif st.session_state.page == "summary":
-    inst_type = st.session_state.instrument
-    inst = MINAT_BELAJAR if inst_type == "minat" else SIKAP_SOSIAL
-    
+# Minat Belajar Open Questions Page
+elif st.session_state.page == "minat_open":
     st.markdown(f"""
-        <div class="header-section">
-            <h1 style="margin:0; color:white;">✅ RINGKASAN JAWABAN</h1>
-            <p style="margin-top:8px; font-size:1rem; opacity:0.95;">Silakan tinjau kembali data Anda sebelum mengirimkan hasil.</p>
+        <div style="margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #064e3b;">📚 ANGKET MINAT BELAJAR MAHASISWA</h3>
+            <div style="background-color: #e2e8f0; height: 6px; border-radius: 3px; margin-top: 8px;">
+                <div style="background-color: #10b981; height: 6px; border-radius: 3px; width: {(5 / 6) * 100}%;"></div>
+            </div>
+            <p style="font-size:0.85rem; color:#6b7280; text-align:right; margin-top:4px;">Bagian 1: Halaman 5 dari 6</p>
         </div>
     """, unsafe_allow_html=True)
     
-    st.subheader("👤 Biodata Responden")
-    for field in inst["biodata_fields"]:
-        val = st.session_state.biodata.get(field["id"], "")
-        st.markdown(f"**{field['label']}:** {val}")
-        
+    st.markdown('<div class="aspect-card">Pertanyaan Terbuka</div>', unsafe_allow_html=True)
+    
+    with st.form("form_minat_open"):
+        responses = {}
+        for i, q_text in enumerate(MINAT_BELAJAR["open_questions"]):
+            essay_key = f"essay_{i+1}"
+            existing_text = st.session_state.minat_essays.get(essay_key, "")
+            responses[essay_key] = st.text_area(q_text, value=existing_text, height=120)
+            
+        col_back, col_next = st.columns(2)
+        with col_back:
+            back_clicked = st.form_submit_button("⬅ Kembali")
+        with col_next:
+            next_clicked = st.form_submit_button("Lanjutkan ke Ringkasan 🏁")
+            
+        if back_clicked:
+            st.session_state.page = "minat_aspect_3"
+            st.rerun()
+            
+        if next_clicked:
+            st.session_state.minat_essays.update(responses)
+            st.session_state.page = "minat_summary"
+            st.rerun()
+
+# Minat Belajar Summary Page
+elif st.session_state.page == "minat_summary":
+    st.markdown("""
+        <div class="header-section">
+            <h1 style="margin:0; color:white; font-size:1.6rem; font-weight:800;">✅ RINGKASAN ANGKET MINAT</h1>
+            <p style="margin-top:8px; font-size:1.1rem; opacity:0.95; font-weight:600;">PENDIDIKAN PROFESI GURU (PPG)</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.subheader("👤 Identitas Responden")
+    st.write(f"**Nama:** {st.session_state.biodata.get('nama', '')}")
+    st.write(f"**Lembaga PPG:** {st.session_state.biodata.get('lembaga_ppg', '')}")
+    st.write(f"**Program Studi:** {st.session_state.biodata.get('program_studi', '')}")
+    st.write(f"**Semester:** {st.session_state.biodata.get('semester', '')}")
+    
     st.markdown("---")
     
     # Calculate Score Info
-    total_q = 20 if inst_type == "minat" else 28
-    scores = [st.session_state.answers[f"q_{i}"]["score"] for i in range(1, total_q + 1) if f"q_{i}" in st.session_state.answers]
+    scores = [st.session_state.minat_answers[f"q_{i}"]["score"] for i in range(1, 21) if f"q_{i}" in st.session_state.minat_answers]
     sum_score = sum(scores)
-    max_score = total_q * 5
-    mean_score = sum_score / total_q if total_q > 0 else 0
+    max_score = 100
+    mean_score = sum_score / 20 if len(scores) > 0 else 0
     
-    col_metric1, col_metric2 = st.columns(2)
-    with col_metric1:
-        st.metric("Total Skor", f"{sum_score} / {max_score}")
-    with col_metric2:
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Total Skor Minat", f"{sum_score} / {max_score}")
+    with col2:
         st.metric("Rata-rata Skor", f"{mean_score:.2f} / 5.00")
         
     st.markdown("---")
     
     col_back, col_submit = st.columns(2)
     with col_back:
-        if st.button("⬅ Edit Jawaban"):
-            # Go back to the qualitative page
-            if inst_type == "minat":
-                st.session_state.page = len(inst["likert_aspects"])
-            else:
-                st.session_state.page = len(inst["likert_aspects"]) + 1
+        if st.button("⬅ Edit Jawaban Minat"):
+            st.session_state.page = "minat_open"
             st.rerun()
             
     with col_submit:
-        if st.button("🚀 Kirim Hasil Sekarang"):
+        if st.button("🚀 Kirim Angket Minat Belajar"):
             payload = build_unified_payload(
-                inst_type,
+                "minat",
                 st.session_state.biodata,
-                st.session_state.answers,
-                st.session_state.essay_answers
+                st.session_state.minat_answers,
+                st.session_state.minat_essays
             )
-            
-            with st.spinner("Sedang mengirimkan data ke Google Sheet..."):
+            with st.spinner("Mengirim data..."):
                 if submit_payload(payload):
-                    st.session_state.page = "finish"
+                    st.session_state.page = "minat_success"
                     st.rerun()
                 else:
-                    st.error("Gagal mengirimkan data otomatis. Silakan coba klik tombol kirim kembali.")
-                    st.info("Sebagai cadangan, Anda dapat menyalin data respons Anda di bawah ini:")
+                    st.error("Gagal mengirimkan data otomatis.")
+                    st.info("Salinan cadangan respons Anda:")
                     st.code(json.dumps(payload, indent=2, ensure_ascii=False))
 
-# 5. FINISH SUCCESS PAGE
-elif st.session_state.page == "finish":
+# Minat Belajar Success screen (Middle-ground success)
+elif st.session_state.page == "minat_success":
     st.balloons()
-    st.markdown(f"""
+    st.markdown("""
         <div class="success-card">
-            <h1 style="font-size: 5rem; margin:0;">🎉</h1>
-            <h1 style="color:#064e3b; margin-top:10px;">TERIMA KASIH!</h1>
-            <p style="font-size: 1.2rem; color: #166534; font-weight:600; margin-bottom:10px;">
-                Jawaban Anda berhasil dikirim dan disimpan.
+            <h1 style="font-size: 4.5rem; margin:0;">🎉</h1>
+            <h2 style="color:#064e3b; margin-top:10px;">ANGKET MINAT BELAJAR BERHASIL DIKIRIM</h2>
+            <p style="font-size: 1.1rem; color: #166534; font-weight:600; margin-bottom:15px;">
+                Terima kasih! Angket pertama Anda telah berhasil disimpan di database peneliti.
             </p>
-            <p style="color:#4b5563;">
-                Partisipasi Anda sangat berharga bagi peningkatan kualitas pembelajaran Pendidikan Profesi Guru (PPG).
+            <p style="color:#4b5563; margin-bottom: 25px;">
+                Silakan klik tombol di bawah ini untuk langsung melanjutkan ke angket kedua (**Angket Sikap Sosial**).
             </p>
         </div>
     """, unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("Isi Angket Lain / Mulai Baru"):
+    if st.button("Mulai Angket Kedua: Sikap Sosial ➔"):
+        st.session_state.page = "sikap_aspect_0"
+        st.rerun()
+
+# Sikap Sosial Aspect Pages
+elif st.session_state.page.startswith("sikap_aspect_"):
+    aspect_idx = int(st.session_state.page.split("_")[-1])
+    aspects = list(SIKAP_SOSIAL["likert_aspects"].keys())
+    aspect_name = aspects[aspect_idx]
+    questions_list = SIKAP_SOSIAL["likert_aspects"][aspect_name]
+    
+    q_offset = 0
+    for i in range(aspect_idx):
+        q_offset += len(SIKAP_SOSIAL["likert_aspects"][aspects[i]])
+        
+    st.markdown(f"""
+        <div style="margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #064e3b;">🤝 ANGKET SIKAP SOSIAL MAHASISWA</h3>
+            <div style="background-color: #e2e8f0; height: 6px; border-radius: 3px; margin-top: 8px;">
+                <div style="background-color: #10b981; height: 6px; border-radius: 3px; width: {((aspect_idx + 1) / 10) * 100}%;"></div>
+            </div>
+            <p style="font-size:0.85rem; color:#6b7280; text-align:right; margin-top:4px;">Bagian 2: Halaman {aspect_idx + 1} dari 10</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f'<div class="aspect-card">{aspect_name}</div>', unsafe_allow_html=True)
+    
+    with st.form(f"form_sikap_aspect_{aspect_idx}"):
+        page_responses = {}
+        for i, q_text in enumerate(questions_list):
+            q_num = q_offset + i + 1
+            q_key = f"q_{q_num}"
+            
+            existing = st.session_state.sikap_answers.get(q_key, None)
+            existing_idx = [5, 4, 3, 2, 1].index(existing["score"]) if existing else 0
+            
+            choice = st.radio(
+                f"{q_num}. {q_text}",
+                options=[5, 4, 3, 2, 1],
+                format_func=lambda x: LIKERT_OPTIONS_SIKAP[x],
+                index=existing_idx,
+                key=f"ui_sikap_{q_key}",
+                horizontal=True
+            )
+            page_responses[q_key] = choice
+            
+        col_back, col_next = st.columns(2)
+        with col_back:
+            back_clicked = st.form_submit_button("⬅ Kembali")
+        with col_next:
+            next_clicked = st.form_submit_button("Lanjutkan ➡️")
+            
+        if back_clicked:
+            if aspect_idx == 0:
+                st.session_state.page = "minat_success"  # go back to Minat success screen
+            else:
+                st.session_state.page = f"sikap_aspect_{aspect_idx - 1}"
+            st.rerun()
+            
+        if next_clicked:
+            for q_key, val in page_responses.items():
+                st.session_state.sikap_answers[q_key] = {
+                    "score": val,
+                    "text": LIKERT_OPTIONS_SIKAP[val]
+                }
+            st.session_state.page = f"sikap_aspect_{aspect_idx + 1}" if aspect_idx < 6 else "sikap_scenario"
+            st.rerun()
+
+# Sikap Sosial Scenarios Page
+elif st.session_state.page == "sikap_scenario":
+    st.markdown(f"""
+        <div style="margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #064e3b;">🤝 ANGKET SIKAP SOSIAL MAHASISWA</h3>
+            <div style="background-color: #e2e8f0; height: 6px; border-radius: 3px; margin-top: 8px;">
+                <div style="background-color: #10b981; height: 6px; border-radius: 3px; width: {(8 / 10) * 100}%;"></div>
+            </div>
+            <p style="font-size:0.85rem; color:#6b7280; text-align:right; margin-top:4px;">Bagian 2: Halaman 8 dari 10</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="aspect-card">Skenario Situasional</div>', unsafe_allow_html=True)
+    
+    with st.form("form_sikap_scenarios"):
+        responses = {}
+        for i, q_text in enumerate(SIKAP_SOSIAL["scenarios"]):
+            essay_key = f"scenario_{i+1}"
+            existing_text = st.session_state.sikap_essays.get(essay_key, "")
+            responses[essay_key] = st.text_area(q_text, value=existing_text, height=120)
+            
+        col_back, col_next = st.columns(2)
+        with col_back:
+            back_clicked = st.form_submit_button("⬅ Kembali")
+        with col_next:
+            next_clicked = st.form_submit_button("Lanjutkan ➡️")
+            
+        if back_clicked:
+            st.session_state.page = "sikap_aspect_6"
+            st.rerun()
+            
+        if next_clicked:
+            st.session_state.sikap_essays.update(responses)
+            st.session_state.page = "sikap_reflection"
+            st.rerun()
+
+# Sikap Sosial Reflections Page
+elif st.session_state.page == "sikap_reflection":
+    st.markdown(f"""
+        <div style="margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #064e3b;">🤝 ANGKET SIKAP SOSIAL MAHASISWA</h3>
+            <div style="background-color: #e2e8f0; height: 6px; border-radius: 3px; margin-top: 8px;">
+                <div style="background-color: #10b981; height: 6px; border-radius: 3px; width: {(9 / 10) * 100}%;"></div>
+            </div>
+            <p style="font-size:0.85rem; color:#6b7280; text-align:right; margin-top:4px;">Bagian 2: Halaman 9 dari 10</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="aspect-card">Refleksi Diri</div>', unsafe_allow_html=True)
+    
+    with st.form("form_sikap_reflections"):
+        responses = {}
+        for i, q_text in enumerate(SIKAP_SOSIAL["reflections"]):
+            essay_key = f"reflection_{i+1}"
+            existing_text = st.session_state.sikap_essays.get(essay_key, "")
+            responses[essay_key] = st.text_area(q_text, value=existing_text, height=120)
+            
+        col_back, col_next = st.columns(2)
+        with col_back:
+            back_clicked = st.form_submit_button("⬅ Kembali")
+        with col_next:
+            next_clicked = st.form_submit_button("Lanjutkan ke Ringkasan 🏁")
+            
+        if back_clicked:
+            st.session_state.page = "sikap_scenario"
+            st.rerun()
+            
+        if next_clicked:
+            st.session_state.sikap_essays.update(responses)
+            st.session_state.page = "sikap_summary"
+            st.rerun()
+
+# Sikap Sosial Summary Page
+elif st.session_state.page == "sikap_summary":
+    st.markdown("""
+        <div class="header-section">
+            <h1 style="margin:0; color:white; font-size:1.6rem; font-weight:800;">✅ RINGKASAN ANGKET SIKAP SOSIAL</h1>
+            <p style="margin-top:8px; font-size:1.1rem; opacity:0.95; font-weight:600;">PENDIDIKAN PROFESI GURU (PPG)</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.subheader("👤 Identitas Responden")
+    st.write(f"**Nama:** {st.session_state.biodata.get('nama', '')}")
+    st.write(f"**Lembaga PPG:** {st.session_state.biodata.get('lembaga_ppg', '')}")
+    st.write(f"**Semester:** {st.session_state.biodata.get('semester', '')}")
+    st.write(f"**Usia:** {st.session_state.biodata.get('usia', '')} Tahun")
+    
+    st.markdown("---")
+    
+    # Calculate Score Info
+    scores = [st.session_state.sikap_answers[f"q_{i}"]["score"] for i in range(1, 29) if f"q_{i}" in st.session_state.sikap_answers]
+    sum_score = sum(scores)
+    max_score = 140
+    mean_score = sum_score / 28 if len(scores) > 0 else 0
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Total Skor Sikap Sosial", f"{sum_score} / {max_score}")
+    with col2:
+        st.metric("Rata-rata Skor", f"{mean_score:.2f} / 5.00")
+        
+    st.markdown("---")
+    
+    col_back, col_submit = st.columns(2)
+    with col_back:
+        if st.button("⬅ Edit Jawaban Sikap"):
+            st.session_state.page = "sikap_reflection"
+            st.rerun()
+            
+    with col_submit:
+        if st.button("🚀 Kirim Angket Sikap Sosial"):
+            payload = build_unified_payload(
+                "sikap",
+                st.session_state.biodata,
+                st.session_state.sikap_answers,
+                st.session_state.sikap_essays
+            )
+            with st.spinner("Mengirim data..."):
+                if submit_payload(payload):
+                    st.session_state.page = "finish"
+                    st.rerun()
+                else:
+                    st.error("Gagal mengirimkan data otomatis.")
+                    st.info("Salinan cadangan respons Anda:")
+                    st.code(json.dumps(payload, indent=2, ensure_ascii=False))
+
+# Finish Success Page
+elif st.session_state.page == "finish":
+    st.balloons()
+    st.markdown(f"""
+        <div class="success-card">
+            <h1 style="font-size: 5.5rem; margin:0;">🏆</h1>
+            <h1 style="color:#064e3b; margin-top:10px;">SELESAI!</h1>
+            <h3 style="color:#166534; font-weight:700;">Terima Kasih, {st.session_state.biodata.get('nama', '')}!</h3>
+            <p style="font-size: 1.15rem; color: #166534; font-weight:600; margin-bottom:10px;">
+                Kedua instrumen penelitian (Minat Belajar & Sikap Sosial) telah berhasil disimpan secara lengkap.
+            </p>
+            <p style="color:#4b5563;">
+                Kontribusi Anda sangat berharga bagi kelancaran dan validitas analisis data penelitian ini.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Mulai Baru / Isi Data Responden Lain"):
         reset_state()
         st.rerun()
