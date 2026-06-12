@@ -7,6 +7,7 @@ from datetime import datetime
 from questions_data import (
     MINAT_BELAJAR,
     SIKAP_SOSIAL,
+    BERPIKIR_KRITIS,
     LIKERT_OPTIONS_MINAT,
     LIKERT_OPTIONS_SIKAP
 )
@@ -113,7 +114,7 @@ local_css()
 # SESSION STATE INITIALIZATION
 # ==========================================
 if "page" not in st.session_state:
-    st.session_state.page = "biodata"  # biodata, minat_aspect_0..3, minat_open, minat_summary, minat_success, sikap_aspect_0..6, sikap_scenario, sikap_reflection, sikap_summary, finish
+    st.session_state.page = "biodata"  # biodata, minat_aspect_X, minat_open, minat_summary, minat_success, sikap_aspect_X, sikap_scenario, sikap_reflection, sikap_summary, sikap_success, kritis_page_X, kritis_summary, finish
 if "biodata" not in st.session_state:
     st.session_state.biodata = {}
 if "minat_answers" not in st.session_state:
@@ -124,6 +125,8 @@ if "sikap_answers" not in st.session_state:
     st.session_state.sikap_answers = {}
 if "sikap_essays" not in st.session_state:
     st.session_state.sikap_essays = {}
+if "kritis_answers" not in st.session_state:
+    st.session_state.kritis_answers = {}
 
 # ==========================================
 # HELPER FUNCTIONS
@@ -135,6 +138,7 @@ def reset_state():
     st.session_state.minat_essays = {}
     st.session_state.sikap_answers = {}
     st.session_state.sikap_essays = {}
+    st.session_state.kritis_answers = {}
 
 def get_apps_script_url():
     url = None
@@ -172,7 +176,10 @@ def submit_payload(payload):
 def build_unified_payload(instrument_type, biodata, answers, essay_answers):
     payload = {}
     payload["Timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    payload["Jenis_Instrumen"] = "Minat Belajar Mahasiswa" if instrument_type == "minat" else "Sikap Sosial Mahasiswa"
+    payload["Jenis_Instrumen"] = (
+        "Minat Belajar Mahasiswa" if instrument_type == "minat" else 
+        ("Sikap Sosial Mahasiswa" if instrument_type == "sikap" else "Berpikir Kritis Mahasiswa")
+    )
     
     # Biodata
     payload["Nama"] = biodata.get("nama", "")
@@ -197,7 +204,7 @@ def build_unified_payload(instrument_type, biodata, answers, essay_answers):
         for i in range(21, 29):
             payload[f"Q{i}_Skor"] = ""
             payload[f"Q{i}_Teks"] = ""
-    else:
+    elif instrument_type == "sikap":
         for i in range(1, 29):
             ans = answers.get(f"q_{i}", None)
             if ans is not None:
@@ -207,7 +214,11 @@ def build_unified_payload(instrument_type, biodata, answers, essay_answers):
             else:
                 payload[f"Q{i}_Skor"] = ""
                 payload[f"Q{i}_Teks"] = ""
-                
+    else:  # Berpikir Kritis
+        for i in range(1, 29):
+            payload[f"Q{i}_Skor"] = ""
+            payload[f"Q{i}_Teks"] = ""
+            
     payload["Skor_Total"] = total_score
     
     # Open questions / scenarios (1 to 6)
@@ -216,11 +227,22 @@ def build_unified_payload(instrument_type, biodata, answers, essay_answers):
             payload[f"Respon_Terbuka_{i}"] = essay_answers.get(f"essay_{i}", "")
         for i in range(4, 7):
             payload[f"Respon_Terbuka_{i}"] = "N/A"
-    else:
+    elif instrument_type == "sikap":
         for i in range(1, 4):
             payload[f"Respon_Terbuka_{i}"] = essay_answers.get(f"scenario_{i}", "")
         for i in range(4, 7):
             payload[f"Respon_Terbuka_{i}"] = essay_answers.get(f"reflection_{i-3}", "")
+    else:  # Berpikir Kritis
+        for i in range(1, 7):
+            payload[f"Respon_Terbuka_{i}"] = "N/A"
+            
+    # Berpikir Kritis Essay Questions (1 to 10)
+    if instrument_type == "kritis":
+        for i in range(1, 11):
+            payload[f"Kritis_Essay_{i}"] = essay_answers.get(f"kritis_{i}", "")
+    else:
+        for i in range(1, 11):
+            payload[f"Kritis_Essay_{i}"] = "N/A"
             
     return payload
 
@@ -228,18 +250,18 @@ def build_unified_payload(instrument_type, biodata, answers, essay_answers):
 # PAGE ROUTER
 # ==========================================
 
-# Page 1: Biodata
+# 1. BIODATA PAGE
 if st.session_state.page == "biodata":
     st.markdown("""
         <div class="header-section">
-            <h1 style="margin:0; color:white; font-size:1.8rem; font-weight:800;">ANGKET RESPON MAHASISWA PPG</h1>
+            <h1 style="margin:0; color:white; font-size:1.8rem; font-weight:800;">ANGKET RESPON & EVALUASI MAHASISWA PPG</h1>
             <p style="margin-top:8px; font-size:1.1rem; opacity:0.95; font-weight:600;">PENDIDIKAN PROFESI GURU (PPG)</p>
             <div style="background-color:rgba(255,255,255,0.2); height:1px; margin: 15px 0;"></div>
             <h3 style="margin:0; color:white; font-size:1.2rem; font-weight:700;">📋 Data Responden</h3>
         </div>
     """, unsafe_allow_html=True)
     
-    st.info("Silakan lengkapi identitas responden Anda. Biodata ini berlaku untuk kedua instrumen.")
+    st.info("Silakan lengkapi identitas responden Anda. Data ini akan otomatis digunakan untuk seluruh instrumen.")
     
     with st.form("form_biodata_combined"):
         nama = st.text_input("Nama", value=st.session_state.biodata.get("nama", ""))
@@ -268,14 +290,15 @@ if st.session_state.page == "biodata":
             else:
                 st.warning("Mohon lengkapi semua field biodata.")
 
-# Minat Belajar Aspect Pages
+# --- SECTION 1: MINAT BELAJAR ---
+
+# Minat Belajar Aspects
 elif st.session_state.page.startswith("minat_aspect_"):
     aspect_idx = int(st.session_state.page.split("_")[-1])
     aspects = list(MINAT_BELAJAR["likert_aspects"].keys())
     aspect_name = aspects[aspect_idx]
     questions_list = MINAT_BELAJAR["likert_aspects"][aspect_name]
     
-    # Calculate overall question number offset
     q_offset = 0
     for i in range(aspect_idx):
         q_offset += len(MINAT_BELAJAR["likert_aspects"][aspects[i]])
@@ -333,7 +356,7 @@ elif st.session_state.page.startswith("minat_aspect_"):
             st.session_state.page = f"minat_aspect_{aspect_idx + 1}" if aspect_idx < 3 else "minat_open"
             st.rerun()
 
-# Minat Belajar Open Questions Page
+# Minat Belajar Open Questions
 elif st.session_state.page == "minat_open":
     st.markdown(f"""
         <div style="margin-bottom: 20px;">
@@ -369,12 +392,12 @@ elif st.session_state.page == "minat_open":
             st.session_state.page = "minat_summary"
             st.rerun()
 
-# Minat Belajar Summary Page
+# Minat Belajar Summary
 elif st.session_state.page == "minat_summary":
     st.markdown("""
         <div class="header-section">
             <h1 style="margin:0; color:white; font-size:1.6rem; font-weight:800;">✅ RINGKASAN ANGKET MINAT</h1>
-            <p style="margin-top:8px; font-size:1.1rem; opacity:0.95; font-weight:600;">PENDIDIKAN PROFESI GURU (PPG)</p>
+            <p style="margin-top:8px; font-size:1.1rem; opacity:0.95; font-weight:600;">Silakan tinjau jawaban Minat Belajar Anda.</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -386,7 +409,7 @@ elif st.session_state.page == "minat_summary":
     
     st.markdown("---")
     
-    # Calculate Score Info
+    # Calculate Score
     scores = [st.session_state.minat_answers[f"q_{i}"]["score"] for i in range(1, 21) if f"q_{i}" in st.session_state.minat_answers]
     sum_score = sum(scores)
     max_score = 100
@@ -423,7 +446,7 @@ elif st.session_state.page == "minat_summary":
                     st.info("Salinan cadangan respons Anda:")
                     st.code(json.dumps(payload, indent=2, ensure_ascii=False))
 
-# Minat Belajar Success screen (Middle-ground success)
+# Minat Belajar Success Screen
 elif st.session_state.page == "minat_success":
     st.balloons()
     st.markdown("""
@@ -444,7 +467,10 @@ elif st.session_state.page == "minat_success":
         st.session_state.page = "sikap_aspect_0"
         st.rerun()
 
-# Sikap Sosial Aspect Pages
+
+# --- SECTION 2: SIKAP SOSIAL ---
+
+# Sikap Sosial Aspects
 elif st.session_state.page.startswith("sikap_aspect_"):
     aspect_idx = int(st.session_state.page.split("_")[-1])
     aspects = list(SIKAP_SOSIAL["likert_aspects"].keys())
@@ -494,7 +520,7 @@ elif st.session_state.page.startswith("sikap_aspect_"):
             
         if back_clicked:
             if aspect_idx == 0:
-                st.session_state.page = "minat_success"  # go back to Minat success screen
+                st.session_state.page = "minat_success"
             else:
                 st.session_state.page = f"sikap_aspect_{aspect_idx - 1}"
             st.rerun()
@@ -508,7 +534,7 @@ elif st.session_state.page.startswith("sikap_aspect_"):
             st.session_state.page = f"sikap_aspect_{aspect_idx + 1}" if aspect_idx < 6 else "sikap_scenario"
             st.rerun()
 
-# Sikap Sosial Scenarios Page
+# Sikap Sosial Scenarios
 elif st.session_state.page == "sikap_scenario":
     st.markdown(f"""
         <div style="margin-bottom: 20px;">
@@ -544,7 +570,7 @@ elif st.session_state.page == "sikap_scenario":
             st.session_state.page = "sikap_reflection"
             st.rerun()
 
-# Sikap Sosial Reflections Page
+# Sikap Sosial Reflections
 elif st.session_state.page == "sikap_reflection":
     st.markdown(f"""
         <div style="margin-bottom: 20px;">
@@ -580,12 +606,12 @@ elif st.session_state.page == "sikap_reflection":
             st.session_state.page = "sikap_summary"
             st.rerun()
 
-# Sikap Sosial Summary Page
+# Sikap Sosial Summary
 elif st.session_state.page == "sikap_summary":
     st.markdown("""
         <div class="header-section">
             <h1 style="margin:0; color:white; font-size:1.6rem; font-weight:800;">✅ RINGKASAN ANGKET SIKAP SOSIAL</h1>
-            <p style="margin-top:8px; font-size:1.1rem; opacity:0.95; font-weight:600;">PENDIDIKAN PROFESI GURU (PPG)</p>
+            <p style="margin-top:8px; font-size:1.1rem; opacity:0.95; font-weight:600;">Silakan tinjau jawaban Sikap Sosial Anda.</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -597,7 +623,7 @@ elif st.session_state.page == "sikap_summary":
     
     st.markdown("---")
     
-    # Calculate Score Info
+    # Calculate Score
     scores = [st.session_state.sikap_answers[f"q_{i}"]["score"] for i in range(1, 29) if f"q_{i}" in st.session_state.sikap_answers]
     sum_score = sum(scores)
     max_score = 140
@@ -627,6 +653,155 @@ elif st.session_state.page == "sikap_summary":
             )
             with st.spinner("Mengirim data..."):
                 if submit_payload(payload):
+                    st.session_state.page = "sikap_success"
+                    st.rerun()
+                else:
+                    st.error("Gagal mengirimkan data otomatis.")
+                    st.info("Salinan cadangan respons Anda:")
+                    st.code(json.dumps(payload, indent=2, ensure_ascii=False))
+
+# Sikap Sosial Success Screen
+elif st.session_state.page == "sikap_success":
+    st.balloons()
+    st.markdown("""
+        <div class="success-card">
+            <h1 style="font-size: 4.5rem; margin:0;">🎉</h1>
+            <h2 style="color:#064e3b; margin-top:10px;">ANGKET SIKAP SOSIAL BERHASIL DIKIRIM</h2>
+            <p style="font-size: 1.1rem; color: #166534; font-weight:600; margin-bottom:15px;">
+                Terima kasih! Angket kedua Anda telah berhasil disimpan di database peneliti.
+            </p>
+            <p style="color:#4b5563; margin-bottom: 25px;">
+                Silakan klik tombol di bawah ini untuk melanjutkan ke bagian terakhir (**Soal Berpikir Kritis**).
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Mulai Bagian Ketiga: Berpikir Kritis ➔"):
+        st.session_state.page = "kritis_page_0"
+        st.rerun()
+
+
+# --- SECTION 3: BERPIKIR KRITIS ---
+
+# Berpikir Kritis Pages (2 questions per page, 5 pages)
+elif st.session_state.page.startswith("kritis_page_"):
+    page_idx = int(st.session_state.page.split("_")[-1])
+    questions = BERPIKIR_KRITIS["questions"]
+    
+    # Each page gets 2 questions
+    q1_idx = page_idx * 2
+    q2_idx = q1_idx + 1
+    
+    st.markdown(f"""
+        <div style="margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #064e3b;">✍️ SOAL BERPIKIR KRITIS MAHASISWA</h3>
+            <div style="background-color: #e2e8f0; height: 6px; border-radius: 3px; margin-top: 8px;">
+                <div style="background-color: #10b981; height: 6px; border-radius: 3px; width: {((page_idx + 1) / 6) * 100}%;"></div>
+            </div>
+            <p style="font-size:0.85rem; color:#6b7280; text-align:right; margin-top:4px;">Bagian 3: Halaman {page_idx + 1} dari 6</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f'<div class="aspect-card">Analisis Deskriptif - Soal {q1_idx + 1} & {q2_idx + 1}</div>', unsafe_allow_html=True)
+    
+    with st.form(f"form_kritis_page_{page_idx}"):
+        responses = {}
+        
+        # Question 1 on page
+        existing_val1 = st.session_state.kritis_answers.get(f"kritis_{q1_idx + 1}", "")
+        responses[f"kritis_{q1_idx + 1}"] = st.text_area(
+            f"Soal {q1_idx + 1}: {questions[q1_idx]}",
+            value=existing_val1,
+            height=180,
+            key=f"kritis_ta_{q1_idx}"
+        )
+        
+        # Question 2 on page
+        existing_val2 = st.session_state.kritis_answers.get(f"kritis_{q2_idx + 1}", "")
+        responses[f"kritis_{q2_idx + 1}"] = st.text_area(
+            f"Soal {q2_idx + 1}: {questions[q2_idx]}",
+            value=existing_val2,
+            height=180,
+            key=f"kritis_ta_{q2_idx}"
+        )
+        
+        col_back, col_next = st.columns(2)
+        with col_back:
+            back_clicked = st.form_submit_button("⬅ Kembali")
+        with col_next:
+            next_clicked = st.form_submit_button("Lanjutkan ➡️")
+            
+        if back_clicked:
+            if page_idx == 0:
+                st.session_state.page = "sikap_success"
+            else:
+                st.session_state.page = f"kritis_page_{page_idx - 1}"
+            st.rerun()
+            
+        if next_clicked:
+            st.session_state.kritis_answers.update(responses)
+            if page_idx < 4:
+                st.session_state.page = f"kritis_page_{page_idx + 1}"
+            else:
+                st.session_state.page = "kritis_summary"
+            st.rerun()
+
+# Berpikir Kritis Summary
+elif st.session_state.page == "kritis_summary":
+    st.markdown("""
+        <div class="header-section">
+            <h1 style="margin:0; color:white; font-size:1.6rem; font-weight:800;">✅ RINGKASAN JAWABAN BERPIKIR KRITIS</h1>
+            <p style="margin-top:8px; font-size:1.1rem; opacity:0.95; font-weight:600;">Silakan tinjau jawaban esai Anda sebelum mengirim.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.subheader("👤 Identitas Responden")
+    st.write(f"**Nama:** {st.session_state.biodata.get('nama', '')}")
+    st.write(f"**Lembaga PPG:** {st.session_state.biodata.get('lembaga_ppg', '')}")
+    st.write(f"**Program Studi:** {st.session_state.biodata.get('program_studi', '')}")
+    st.write(f"**Semester:** {st.session_state.biodata.get('semester', '')}")
+    st.write(f"**Usia:** {st.session_state.biodata.get('usia', '')} Tahun")
+    
+    st.markdown("---")
+    st.subheader("📝 Tinjauan Jawaban Esai")
+    
+    for i in range(10):
+        question_text = BERPIKIR_KRITIS["questions"][i]
+        ans_text = st.session_state.kritis_answers.get(f"kritis_{i+1}", "")
+        
+        with st.expander(f"Soal {i+1}: {question_text[:70]}..."):
+            st.write(f"**Pertanyaan:** {question_text}")
+            st.info(ans_text if ans_text.strip() else "*(Belum diisi)*")
+            
+    st.markdown("---")
+    
+    col_back, col_submit = st.columns(2)
+    with col_back:
+        if st.button("⬅ Edit Jawaban Kritis"):
+            st.session_state.page = "kritis_page_4"
+            st.rerun()
+            
+    with col_submit:
+        if st.button("🚀 Kirim Jawaban Berpikir Kritis"):
+            # Check if any answer is empty
+            any_empty = False
+            for i in range(1, 11):
+                if not st.session_state.kritis_answers.get(f"kritis_{i}", "").strip():
+                    any_empty = True
+                    break
+                    
+            if any_empty:
+                st.warning("Ada jawaban esai yang masih kosong. Silakan periksa kembali.")
+                
+            payload = build_unified_payload(
+                "kritis",
+                st.session_state.biodata,
+                None,
+                st.session_state.kritis_answers
+            )
+            with st.spinner("Mengirim data..."):
+                if submit_payload(payload):
                     st.session_state.page = "finish"
                     st.rerun()
                 else:
@@ -634,19 +809,19 @@ elif st.session_state.page == "sikap_summary":
                     st.info("Salinan cadangan respons Anda:")
                     st.code(json.dumps(payload, indent=2, ensure_ascii=False))
 
-# Finish Success Page
+# Tri-Instrument Finish Page
 elif st.session_state.page == "finish":
     st.balloons()
     st.markdown(f"""
         <div class="success-card">
             <h1 style="font-size: 5.5rem; margin:0;">🏆</h1>
-            <h1 style="color:#064e3b; margin-top:10px;">SELESAI!</h1>
+            <h1 style="color:#064e3b; margin-top:10px;">SELESAI LENGKAP!</h1>
             <h3 style="color:#166534; font-weight:700;">Terima Kasih, {st.session_state.biodata.get('nama', '')}!</h3>
-            <p style="font-size: 1.15rem; color: #166534; font-weight:600; margin-bottom:10px;">
-                Kedua instrumen penelitian (Minat Belajar & Sikap Sosial) telah berhasil disimpan secara lengkap.
+            <p style="font-size: 1.15rem; color: #166534; font-weight:600; margin-bottom:15px;">
+                Ketiga instrumen evaluasi (Minat Belajar, Sikap Sosial, & Berpikir Kritis) telah berhasil disimpan secara lengkap di database.
             </p>
             <p style="color:#4b5563;">
-                Kontribusi Anda sangat berharga bagi kelancaran dan validitas analisis data penelitian ini.
+                Partisipasi dan kontribusi Anda sangat berharga bagi kelancaran dan validitas analisis data penelitian ini.
             </p>
         </div>
     """, unsafe_allow_html=True)

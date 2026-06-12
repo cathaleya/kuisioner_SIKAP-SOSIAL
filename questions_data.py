@@ -128,3 +128,22 @@ LIKERT_OPTIONS_SIKAP = {
     2: "TS (Tidak Setuju)",
     1: "STS (Sangat Tidak Setuju)"
 }
+
+BERPIKIR_KRITIS = {
+    "title": "SOAL BERPIKIR KRITIS",
+    "subtitle": "PENDIDIKAN PROFESI GURU (PPG)",
+    "biodata_title": "Data Responden",
+    "questions": [
+        "Pak Roni ketika akan melakukan kegiatan pembelajaran dengan topik Tata Surya melakukan pre tes terlebih dahulu, Jika anda sebagai Pak Roni, analisislah apa yang akan anda lakukan selanjutnya dalam pembelajaran!",
+        "Ketika melakukan proses pembelajaran Pak Beni selalu menggunakan media, kadang memutar video pembelajaran, kadang memutar CD audio, kadang menggunakan poster berwarna, agar peserta didiknya memperhatikan dan tertarik terhadap apa yang dibahasnya serta senang mengikuti pelajarannya. Buatlah rancangan media pembelajaran yang paling sesuai untuk mengajarkan tentang kebudayaan Indonesia di kelas 4 SD!",
+        "Dalam sebuah sekolah, seorang guru SD yang dituntut mengarahkan proses pembelajaran ke arah karakteristik pembelajaran Abad ke-21. Untuk memenuhi hal tersebut, sekolah dalam melaksanakan rekruitmen guru telah menetapkan standar kualifikasi yang sesuai. Ibu Ani adalah salah satu calon guru yang mengikuti kegiatan rekruitmen tersebut. Ibu Ani memiliki kualifikasi pendidikan S1 dalam bidang pendidikan dan telah memiliki sertifikasi pendidik. Selain itu, Ibu Ani juga memiliki kemampuan yang mendalam dalam mengintegrasikan teknologi dalam pembelajaran, mengelola kelas dengan efektif, serta menerapkan strategi pembelajaran yang kreatif. Berdasarkan cerita tersebut, analisislah apa saja yang sudah dimiliki oleh Ibu Ani sebagai modal untuk menjadi guru dalam pembelajaran Abad ke-21!",
+        "Seorang guru ingin menganalisis hasil belajar siswa setelah sebuah pembelajaran berlangsung. Guru tersebut memilih untuk menggunakan metode penilaian berupa tes tertulis dengan pilihan ganda dan esai. Setelah mengumpulkan hasil penilaian, guru tersebut akan melakukan analisis statistik untuk melihat tingkat pemahaman siswa secara keseluruhan. Analisislah tujuan dari metode penilaian yang dilakukan oleh guru tersebut!",
+        "Seorang guru SD yang profesional harus memenuhi persyaratan, kualifikasi, dan kompetensi tertentu. Pak Budi, seorang guru SD yang profesional, memiliki pengalaman mengajar selama 5 tahun di tingkat SD dan telah mengikuti berbagai pelatihan terkait pengembangan kurikulum dan evaluasi pembelajaran. Selain itu, Pak Budi memiliki kemampuan dalam mendesain dan mengimplementasikan pembelajaran berbasis proyek yang melibatkan siswa secara aktif. Berdasarkan cerita tersebut, nilailah apa saja kompetensi yang dimiliki oleh Pak Budi?",
+        "Seorang guru di suatu sekolah mempublikasikan informasi pribadi siswa di media sosial tanpa izin dan membagikan soal ujian kepada siswa sebelum ujian dilaksanakan. Dalam konteks ini, evaluasilah sanksi yang mungkin diterapkan terhadap guru tersebut!",
+        "Pak Larso melaksanakan pembelajaran dengan menggunakan masalah sebagai langkah awal dalam mengumpulkan dan mengintergrasikan pengetahuan baru berdasarkan pengalamannya, dimulai dengan memunculkan pertanyaan penuntun (a guiding question) dan membimbing peserta didik berkolaboratif yang mengintegrasikan berbagai subjek (materi) dalam kurikulum. Analisislah model pembelajaran yang dilaksanakan oleh Pak Larso!",
+        "Ketika ada siswa yang mengajukan “protes” atas jawaban ulangan yang diyakini benar tetapi dinyatakan salah oleh guru, dan terbukti bahwa jawaban yang dimaksud adalah benar, Dari kasus diatas, buatlah rancangan tindakan yang sebaiknya dilakukan oleh guru!",
+        "Peserta didik dalam suatu kelas gaya belajarnya beragam ada yang visual, auditori, dan kinestetik. Namun kegiatan pembelajaran selama ini masih banyak yang konvensional- klasikal. Buatlah rancangan pembelajran yang memungkinkan dapat memenuhi ketiga gaya belajar tersebut!",
+        "Tulislah beberapa hal yang perlu dipertimbangkan oleh seorang guru dalam mengembangkan kurikulum!"
+    ]
+}
+
